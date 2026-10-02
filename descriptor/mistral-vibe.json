@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "agent": {
+    "id": "mistral-vibe",
+    "name": "@mistralai/mistral-vibe",
+    "version": "0.1.0",
+    "description": "Mistral Vibe coding agent, bridged to Cadencr through its native ACP binary vibe-acp.",
+    "repository": "https://github.com/merkr-software/cadencr-plugin-provider-vibe",
+    "website": "https://mistral.ai/vibe",
+    "authors": ["edjubert"],
+    "license": "Apache-2.0",
+    "icon": "icon.svg"
+  },
+  "installation": {
+    "enabled": true,
+    "executable": {
+      "command": "/ABSOLUTE/PATH/TO/cadencr-plugin-provider-vibe/target/release/cadencr-plugin-provider-vibe"
+    },
+    "assets": {
+      "directory": "/ABSOLUTE/PATH/TO/cadencr-plugin-provider-vibe"
+    }
+  }
+}
