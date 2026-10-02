@@ -58,6 +58,19 @@ To install from another directory, keep `installation.executable.command`
 pointing at the release binary and `installation.assets.directory` at this
 repository root (the directory that holds `icon.svg`).
 
+### Cadencr development checkout
+
+Settings default to a `cadencr-settings` directory beside the database file.
+With the standard `pnpm dev` configuration (`CADENCR_DB_PATH=./cadencr.local.db`),
+the service runs from `packages/service`, so install the descriptor at
+`packages/service/cadencr-settings/providers/mistral-vibe.json`.
+The repository-root `cadencr-settings` directory is not read in this setup.
+An explicit `CADENCR_SETTINGS_DIR` overrides this location.
+
+Restart `pnpm dev` after installing the descriptor. Keep the executable and
+assets paths absolute; a development install does not install the provider
+into the packaged app's settings.
+
 ## Notes
 
 - Model discovery uses a real disposable ACP session so the pre-session
@@ -75,3 +88,9 @@ repository root (the directory that holds `icon.svg`).
   automatically.
 - Publication to the Cadencr registry (signed package via `pack-provider`)
   is a later step; the registry contribution gate is not open yet.
+
+## License
+
+The connector is licensed under [Apache-2.0](LICENSE).
+The Mistral icon comes from Lobe Icons under MIT; see
+[third-party notices](THIRD_PARTY_NOTICES.md) for attribution and trademark notes.

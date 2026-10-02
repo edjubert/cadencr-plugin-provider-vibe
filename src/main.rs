@@ -51,7 +51,9 @@ fn execute_models(args: &[OsString]) -> Result<ExitCode, String> {
         ));
     }
     if args[1] != MODEL_DISCOVERY_FORMAT {
-        return Err(format!("models requires `--format {MODEL_DISCOVERY_FORMAT}`"));
+        return Err(format!(
+            "models requires `--format {MODEL_DISCOVERY_FORMAT}`"
+        ));
     }
     let cwd = PathBuf::from(&args[3]);
     if !cwd.is_absolute() {
@@ -74,7 +76,6 @@ fn execute_run(args: &[OsString]) -> Result<ExitCode, String> {
 mod tests {
     use super::execute;
     use std::ffi::OsString;
-    use std::process::ExitCode;
 
     fn args(values: &[&str]) -> Vec<OsString> {
         values.iter().map(OsString::from).collect()
@@ -95,14 +96,7 @@ mod tests {
 
     #[test]
     fn rejects_unknown_format_and_protocol() {
-        assert!(execute(args(&[
-            "models",
-            "--format",
-            "other",
-            "--cwd",
-            "/tmp",
-        ]))
-        .is_err());
+        assert!(execute(args(&["models", "--format", "other", "--cwd", "/tmp",])).is_err());
         assert!(execute(args(&["run", "--protocol", "acp-v2"])).is_err());
     }
 
