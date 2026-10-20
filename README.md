@@ -2,6 +2,8 @@
 
 Cadencr code-backed provider connector for the [Mistral Vibe](https://github.com/mistralai/mistral-vibe) coding agent.
 
+![Cadencr + Mistral Vibe logo](logos/logo-128.png)
+
 The connector implements the Cadencr provider executable contract:
 
 | Command | Behavior |
@@ -89,8 +91,21 @@ into the packaged app's settings.
 - Publication to the Cadencr registry (signed package via `pack-provider`)
   is a later step; the registry contribution gate is not open yet.
 
+## Logo assets
+
+The [logos directory](logos/README.md) contains the SVG logo, transparent PNG
+exports from 16 to 1024 px, and a visual comparison with the Cadencr mark.
+The root `icon.svg` remains the provider descriptor's icon.
+
+To regenerate the vector and PNG exports:
+
+```bash
+python3 scripts/export-logos.py
+```
+
 ## License
 
 The connector is licensed under [Apache-2.0](LICENSE).
-The Mistral icon comes from Lobe Icons under MIT; see
-[third-party notices](THIRD_PARTY_NOTICES.md) for attribution and trademark notes.
+The connector logo combines the Cadencr dot ring with the Mistral Vibe pixel
+cat head, adapted from Miaou. See [third-party notices](THIRD_PARTY_NOTICES.md)
+for sources, licenses, and trademark notes.

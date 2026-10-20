@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="512" height="512">
+  <title>Cadencr + Mistral Vibe</title>
+  <desc>The Miaou pixel cat surrounded by twelve Cadencr dots connected by a wave.</desc>
+  <circle cx="24" cy="24" r="22" fill="#131416"/>
+
+  <!-- A continuous wave passes through the twelve points of the Cadencr ring. -->
+  <path d="M24 9.5
+    C25.27 8.64 26.82 8.04 28.18 8.40
+    C29.54 8.77 30.59 10.06 31.25 11.44
+    C31.91 12.82 32.29 14.12 33.09 14.91
+    C33.88 15.71 35.18 16.09 36.56 16.75
+    C37.94 17.41 39.23 18.46 39.60 19.82
+    C39.96 21.18 39.36 22.73 38.50 24
+    C37.64 25.27 36.70 26.24 36.41 27.33
+    C36.12 28.41 36.44 29.72 36.56 31.25
+    C36.67 32.78 36.42 34.42 35.42 35.42
+    C34.42 36.42 32.78 36.67 31.25 36.56
+    C29.72 36.44 28.41 36.12 27.33 36.41
+    C26.24 36.70 25.27 37.64 24 38.50
+    C22.73 39.36 21.18 39.96 19.82 39.60
+    C18.46 39.23 17.41 37.94 16.75 36.56
+    C16.09 35.18 15.71 33.88 14.91 33.09
+    C14.12 32.29 12.82 31.91 11.44 31.25
+    C10.06 30.59 8.77 29.54 8.40 28.18
+    C8.04 26.82 8.64 25.27 9.50 24
+    C10.36 22.73 11.30 21.76 11.59 20.67
+    C11.88 19.59 11.56 18.28 11.44 16.75
+    C11.33 15.22 11.58 13.58 12.58 12.58
+    C13.58 11.58 15.22 11.33 16.75 11.44
+    C18.28 11.56 19.59 11.88 20.67 11.59
+    C21.76 11.30 22.73 10.36 24 9.50Z"
+    fill="none" stroke="#eff0f2" stroke-width="1.05" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Uniform radius matches Cadencr's STANDARD_CUT.dotR. -->
+  <g fill="#eff0f2">
+    <circle cx="31.25" cy="11.44" r="1.9"/>
+    <circle cx="36.56" cy="16.75" r="1.9"/>
+    <circle cx="38.5" cy="24" r="1.9"/>
+    <circle cx="36.56" cy="31.25" r="1.9"/>
+    <circle cx="31.25" cy="36.56" r="1.9"/>
+    <circle cx="24" cy="38.5" r="1.9"/>
+    <circle cx="16.75" cy="36.56" r="1.9"/>
+    <circle cx="11.44" cy="31.25" r="1.9"/>
+    <circle cx="9.5" cy="24" r="1.9"/>
+    <circle cx="11.44" cy="16.75" r="1.9"/>
+    <circle cx="16.75" cy="11.44" r="1.9"/>
+  </g>
+  <circle cx="24" cy="9.5" r="1.9" fill="#FF8205"/>
+
+  <!-- Head cropped from the reference pose in Miaou's Chaton.swift.
+       Keep the 0.85-cell squares and the original Mistral row palette. -->
+  <g transform="translate(14.55 16.65) scale(2.1)">
+    <g fill="#FFD700">
+      <rect x="2.075" y="0.075" width="0.85" height="0.85"/>
+      <rect x="6.075" y="0.075" width="0.85" height="0.85"/>
+      <rect x="1.075" y="1.075" width="0.85" height="0.85"/>
+      <rect x="3.075" y="1.075" width="0.85" height="0.85"/>
+      <rect x="5.075" y="1.075" width="0.85" height="0.85"/>
+      <rect x="7.075" y="1.075" width="0.85" height="0.85"/>
+    </g>
+    <g fill="#FFAF00">
+      <rect x="1.075" y="2.075" width="0.85" height="0.85"/>
+      <rect x="4.075" y="2.075" width="0.85" height="0.85"/>
+      <rect x="7.075" y="2.075" width="0.85" height="0.85"/>
+      <rect x="1.075" y="3.075" width="0.85" height="0.85"/>
+      <rect x="7.075" y="3.075" width="0.85" height="0.85"/>
+    </g>
+    <g fill="#FF8205">
+      <rect x="1.075" y="4.075" width="0.85" height="0.85"/>
+      <rect x="3.075" y="4.075" width="0.85" height="0.85"/>
+      <rect x="5.075" y="4.075" width="0.85" height="0.85"/>
+      <rect x="7.075" y="4.075" width="0.85" height="0.85"/>
+      <rect x="0.075" y="5.075" width="0.85" height="0.85"/>
+      <rect x="4.075" y="5.075" width="0.85" height="0.85"/>
+      <rect x="8.075" y="5.075" width="0.85" height="0.85"/>
+      <rect x="1.075" y="6.075" width="0.85" height="0.85"/>
+      <rect x="2.075" y="6.075" width="0.85" height="0.85"/>
+      <rect x="3.075" y="6.075" width="0.85" height="0.85"/>
+      <rect x="5.075" y="6.075" width="0.85" height="0.85"/>
+      <rect x="6.075" y="6.075" width="0.85" height="0.85"/>
+      <rect x="7.075" y="6.075" width="0.85" height="0.85"/>
+    </g>
+  </g>
+</svg>
