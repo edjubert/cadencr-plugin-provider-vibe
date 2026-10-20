@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the connector's SVG logo and transparent PNG size ladder."""
+"""Export the connector's GitHub logo PNG size ladder from logos/logo.svg."""
 
 from pathlib import Path
 import shutil
@@ -16,14 +16,8 @@ def main():
     if renderer is None:
         sys.exit("rsvg-convert is required. On macOS: brew install librsvg")
 
-    source = ROOT / "icon.svg"
+    source = ROOT / "logos" / "logo.svg"
     destination = ROOT / "logos"
-    destination.mkdir(exist_ok=True)
-    svg = source.read_text(encoding="utf-8")
-    (destination / "logo.svg").write_text(
-        svg.replace('width="1em" height="1em"', 'width="512" height="512"'),
-        encoding="utf-8",
-    )
     for size in SIZES:
         subprocess.run(
             [
@@ -35,7 +29,7 @@ def main():
             ],
             check=True,
         )
-    print(f"Exported logo.svg and {len(SIZES)} PNG sizes to {destination}")
+    print(f"Exported {len(SIZES)} PNG sizes from {source} to {destination}")
 
 
 if __name__ == "__main__":

@@ -93,11 +93,13 @@ into the packaged app's settings.
 
 ## Logo assets
 
-The [logos directory](logos/README.md) contains the SVG logo, transparent PNG
-exports from 16 to 1024 px, and a visual comparison with the Cadencr mark.
-The root `icon.svg` remains the provider descriptor's icon.
+The [logos directory](logos/README.md) holds the connector logo used on
+GitHub: the SVG logo, transparent PNG exports from 16 to 1024 px, and a
+visual comparison with the Cadencr mark. The root `icon.svg` stays the
+Mistral mark referenced by the provider descriptor, so CadencR keeps
+displaying the Mistral logo.
 
-To regenerate the vector and PNG exports:
+To regenerate the PNG exports:
 
 ```bash
 python3 scripts/export-logos.py

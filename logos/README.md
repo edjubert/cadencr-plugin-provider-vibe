@@ -19,9 +19,8 @@ radius of 1.9 on a 48-unit grid.
 
 ## Regenerate
 
-The connector's root [icon.svg](../icon.svg) is the source of truth and the
-asset referenced by the provider descriptor. The vector and PNG exports are
-generated from it:
+[logo.svg](logo.svg) is the source of truth for this directory. The PNG
+exports are generated from it:
 
 ```bash
 python3 scripts/export-logos.py
@@ -29,5 +28,10 @@ python3 scripts/export-logos.py
 
 Requires Python 3 and `rsvg-convert` from librsvg (`brew install librsvg` on
 macOS). The comparison preview is a separate presentation image.
+
+This directory holds the connector logo used on GitHub. The root
+[icon.svg](../icon.svg) is a separate asset: it stays the Mistral mark
+referenced by the provider descriptor, so CadencR keeps displaying the
+Mistral logo.
 
 See [third-party notices](../THIRD_PARTY_NOTICES.md) for sources and licenses.
