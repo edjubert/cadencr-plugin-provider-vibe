@@ -108,6 +108,7 @@ python3 scripts/export-logos.py
 ## License
 
 The connector is licensed under [Apache-2.0](LICENSE).
-The connector logo combines the Cadencr dot ring with the Mistral Vibe pixel
-cat head, adapted from Miaou. See [third-party notices](THIRD_PARTY_NOTICES.md)
+The CadencR icon is the Mistral mark from Lobe Icons (MIT). The GitHub
+connector logo combines the Cadencr dot ring with the Mistral Vibe pixel cat
+head, adapted from Miaou. See [third-party notices](THIRD_PARTY_NOTICES.md)
 for sources, licenses, and trademark notes.
