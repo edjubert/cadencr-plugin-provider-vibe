@@ -29,7 +29,7 @@
     C13.58 11.58 15.22 11.33 16.75 11.44
     C18.28 11.56 19.59 11.88 20.67 11.59
     C21.76 11.30 22.73 10.36 24 9.50Z"
-    fill="none" stroke="#eff0f2" stroke-width="0.65" stroke-linecap="round" stroke-linejoin="round"/>
+    fill="none" stroke="#eff0f2" stroke-width="0.35" stroke-linecap="round" stroke-linejoin="round"/>
 
   <!-- Uniform radius matches Cadencr's STANDARD_CUT.dotR. -->
   <g fill="#eff0f2">
