@@ -2,7 +2,9 @@
 
 Cadencr code-backed provider connector for the [Mistral Vibe](https://github.com/mistralai/mistral-vibe) coding agent.
 
-![Cadencr + Mistral Vibe logo](logos/logo-128.png)
+<p align="center">
+  <img src="logos/logo-512.png" alt="Cadencr + Mistral Vibe logo" width="256" height="256">
+</p>
 
 The connector implements the Cadencr provider executable contract:
 
