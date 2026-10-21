@@ -14,7 +14,7 @@
   "installation": {
     "enabled": true,
     "executable": {
-      "command": "/ABSOLUTE/PATH/TO/cadencr-plugin-provider-vibe/target/release/cadencr-plugin-provider-vibe"
+      "command": "/ABSOLUTE/PATH/TO/cadencr-plugin-provider-vibe/bin/provider"
     },
     "assets": {
       "directory": "/ABSOLUTE/PATH/TO/cadencr-plugin-provider-vibe"
