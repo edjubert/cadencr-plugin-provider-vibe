@@ -41,6 +41,19 @@ export MISTRAL_API_KEY=...
 
 The connector and Cadencr never collect, store, or broker Vibe credentials.
 
+## Marketplace installation
+
+Marketplace providers require CadencR `0.16.0` or later. Set up and authenticate
+the native Vibe CLI first, then install **Mistral Vibe** from the Marketplace's
+provider listings once this package is accepted into the registry.
+
+The initial package targets Apple Silicon macOS (`darwin-aarch64`). Intel
+macOS, Linux, and Windows are not included until their native builds pass the
+same runtime checks.
+
+The package launches `bin/provider`; Vibe remains a separately installed
+prerequisite. Provider credentials stay in Vibe's own configuration.
+
 ## Build
 
 Clone this repository into the folder you want CadencR to use as the connector
@@ -78,7 +91,10 @@ python scripts/build-provider.py
 1. `CADENCR_VIBE_ACP_PATH` environment variable (absolute path recommended);
 2. `vibe-acp` on `PATH`.
 
-## Install through CadencR settings
+## Local source import (development only)
+
+This imports a source checkout as a local provider project. End users should
+install the managed Marketplace package instead.
 
 1. Install and authenticate the native Vibe CLI, then build the connector with
    the commands above. CadencR requires the executable to exist before import.
@@ -111,11 +127,9 @@ After updating the source, quit CadencR, run `python3 scripts/build-provider.py`
 again in the imported checkout, and restart CadencR. Provider registration is
 fixed for the service process lifetime; hot reload is not supported.
 
-This is CadencR's local developer import workflow, not marketplace installation.
-
 ### Advanced: manual descriptor installation
 
-The settings flow above is recommended. If managing descriptors manually:
+Use this only when managing a local development descriptor manually:
 
 1. Build `bin/provider` using the build script.
 2. Copy `descriptor/mistral-vibe.json` to
@@ -153,8 +167,45 @@ installing it. The settings import flow handles this location automatically.
 - Durable resume: Vibe advertises `loadSession` (legacy load with replay
   suppression on the Cadencr side) and `session/close`. Cadencr handles both
   automatically.
-- Publication to the Cadencr registry (signed package via `pack-provider`)
-  is a later step; the registry contribution gate is not open yet.
+
+## Marketplace release preparation
+
+`marketplace/package.json` contains the managed provider metadata used by the
+packer and the author release. It declares CadencR `0.16.0` as the minimum host
+version and includes the Apple Silicon macOS target qualified for this release.
+Its SHA-256 binds the exact candidate archive; a rebuild that changes the
+archive must update the digest.
+
+Build each target on a native runner, then stage exactly these files outside
+the source checkout:
+
+```text
+staging/
+  bin/provider
+  icon.svg
+  LICENSE
+  README.md
+```
+
+For each target, pack the staged executable with the Cadencr CLI from the
+CadencR `v0.16.0` release (CLI version `0.15.4`):
+
+```bash
+cadencr registry pack-provider \
+  --package marketplace/package.json \
+  --target darwin-aarch64 \
+  --directory /absolute/path/to/staging \
+  --output /absolute/path/to/provider-mistral-vibe-0.1.0-darwin-aarch64.tar.gz
+```
+
+The returned SHA-256 must match the digest already recorded in
+`marketplace/package.json`. Publish the immutable source tag, archive, and this
+`package.json` in the author repository's GitHub Release. Then prepare a
+schema-2 provider package and matching submission for the
+`merkr-software/cadencr-registry` contribution PR. The submission must bind the
+exact release tag and full source commit; validate the package and submission
+with the qualified `cadencr registry` CLI before opening the PR. Registry
+maintainers review and publish accepted entries.
 
 ## Logo assets
 

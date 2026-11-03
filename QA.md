@@ -54,3 +54,28 @@ uses the same stable executable path.
 
 These checks cover the executable and import prerequisites. The settings
 dialog itself was not exercised during this validation.
+
+## CadencR v0.16.0 Marketplace preflight — 2026-11-03
+
+Checked the published CadencR `v0.16.0` provider contract and built its
+`cadencr` CLI (`0.15.4`) from that exact source tag.
+
+| Check | Result |
+| --- | --- |
+| Native release binary | Apple Silicon macOS build reports `0.1.0`. |
+| Model discovery | Vibe `2.26.0` returns 19 choices, with a valid current model. |
+| ACP runtime | ACP v1 `initialize`, `session/new`, and `session/close` pass; the discovered model selector matches the live session selector. |
+| Marketplace package | `pack-provider` creates an archive containing `bin/provider`, `icon.svg`, `README.md`, and `LICENSE`; the executable is mode `0755`. The extracted archive passes local provider validation, model discovery, and ACP v1 lifecycle checks. |
+| Archive digest | `5c6cd252bef4fb21acc584a145f8d65df6a560b4169f5bbd8b417edc19c75bce` (`darwin-aarch64`); a repeated pack produces identical bytes. |
+| CadencR validation | Schema-2 package and submission pass `registry validate-metadata` and `registry validate-submission`; a candidate tree passes `registry validate` against the registry's current `main`. |
+| Unit tests | All eight Rust tests pass. |
+
+An Intel macOS binary was also cross-built and exercised under Rosetta. It is
+not declared in the Marketplace metadata because that was not a native Intel
+host qualification. Linux and Windows targets have not been qualified.
+
+The registry preflight used a placeholder source commit, so it does not prove
+the source release exists. The installed CadencR desktop Marketplace flow,
+author GitHub release, registry contribution PR, and maintainer publication
+remain unexercised. The final registry submission must bind the exact source
+commit and tag used for the author release.
