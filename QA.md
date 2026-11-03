@@ -74,8 +74,20 @@ An Intel macOS binary was also cross-built and exercised under Rosetta. It is
 not declared in the Marketplace metadata because that was not a native Intel
 host qualification. Linux and Windows targets have not been qualified.
 
-The registry preflight used a placeholder source commit, so it does not prove
-the source release exists. The installed CadencR desktop Marketplace flow,
-author GitHub release, registry contribution PR, and maintainer publication
-remain unexercised. The final registry submission must bind the exact source
-commit and tag used for the author release.
+The initial registry preflight used a placeholder source commit. The actual
+released source binding and uploaded bytes were checked separately below.
+
+## Author release and registry submission — 2026-11-03
+
+| Check | Result |
+| --- | --- |
+| Released source | The immutable `v0.1.0` tag resolves to `a1619e77dfb09a8b2742e3dc6aa5cf5362fe69a6`, the merged source revision on `main`. |
+| Author publication | The shared `cadencr plugin inspect-release` and `publish-release` engine published the [GitHub release](https://github.com/edjubert/cadencr-plugin-provider-vibe/releases/tag/v0.1.0), with request SHA-256 `b02651900f9e5984ce4cda40899a7fcc8a5c75e484e263020dff296380f551a0`. |
+| Uploaded bytes | The downloaded archive has SHA-256 `5c6cd252bef4fb21acc584a145f8d65df6a560b4169f5bbd8b417edc19c75bce`; the downloaded `package.json` is byte-identical to the source metadata, with SHA-256 `101eb17740f2bbb5e980dc27dbd9ca8a2b086c0a9b5e531f2a8913996d56cbe4`. |
+| Pinned registry CLI | The official Linux `cli/v0.15.4` executable matches the registry pin `d925f203c3fd2e51621ad00ef1413bb25fdf8bc25792dbec9d5d2a67b1d4244d`. Its metadata, submission and complete contribution validators pass in an Ubuntu 24.04 container with read-only inputs. |
+| Registry contribution | [Registry PR #21](https://github.com/merkr-software/cadencr-registry/pull/21) adds the matching schema-2 package and submission, bound to the released tag and full source commit. Validation used registry base `e31b07eea3d17cc501f8e8b607784ebc1c6c98b0`. |
+| Registry CI | [Workflow run 41689046091](https://github.com/merkr-software/cadencr-registry/actions/runs/41689046091) reports `action_required` with no jobs executed; it requires maintainer action. |
+
+The CadencR v0.16.0 desktop Marketplace installation flow has not been exercised.
+Marketplace listing still requires maintainer acceptance, protected mirroring,
+and signed catalog publication.
