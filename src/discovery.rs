@@ -13,7 +13,7 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use agent_client_protocol::schema::v1::SessionConfigOption;
 use serde_json::{json, Value};
@@ -24,8 +24,8 @@ const SESSION_CLOSE_ID: &str = "cadencr-vibe-close";
 
 /// Total discovery budget. The host terminates `models` after 10 seconds,
 /// so stay below it to return an actionable error instead of being killed.
-const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(8);
-const CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
+const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(9);
+const CLOSE_TIMEOUT: Duration = Duration::from_secs(1);
 
 const AUTH_HINT: &str = "Mistral Vibe credentials are missing or invalid. \
      Run `vibe --setup` (or export MISTRAL_API_KEY), then retry.";
@@ -39,34 +39,56 @@ pub fn discover_model_options(cwd: &Path) -> Result<Vec<SessionConfigOption>, St
 }
 
 struct DiscoverySession {
-    child: Child,
+    _child: ReapedChild,
     stdin: std::process::ChildStdin,
     lines: mpsc::Receiver<String>,
+    deadline: Instant,
+    session_id: Option<String>,
+}
+
+/// Own the process immediately after spawn, including before ACP initialization.
+struct ReapedChild(Child);
+
+impl Drop for ReapedChild {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
 }
 
 impl DiscoverySession {
     fn spawn(cwd: &Path) -> Result<Self, String> {
         let binary =
             std::env::var_os(crate::runner::VIBE_ACP_PATH_ENV).unwrap_or_else(|| "vibe-acp".into());
-        let mut child = Command::new(&binary)
-            .current_dir(cwd)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .spawn()
-            .map_err(|error| {
-                format!(
-                    "failed to start `{}`: {error}. Install the Mistral Vibe CLI \
+        Self::spawn_with_command(Command::new(binary), cwd)
+    }
+
+    fn spawn_with_command(mut command: Command, cwd: &Path) -> Result<Self, String> {
+        let deadline = Instant::now() + DISCOVERY_TIMEOUT;
+        let binary = command.get_program().to_string_lossy().into_owned();
+        let mut child = ReapedChild(
+            command
+                .current_dir(cwd)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::inherit())
+                .spawn()
+                .map_err(|error| {
+                    format!(
+                        "failed to start `{}`: {error}. Install the Mistral Vibe CLI \
                      (https://mistral.ai/vibe) or set {}",
-                    binary.to_string_lossy(),
-                    crate::runner::VIBE_ACP_PATH_ENV,
-                )
-            })?;
+                        binary,
+                        crate::runner::VIBE_ACP_PATH_ENV,
+                    )
+                })?,
+        );
         let stdin = child
+            .0
             .stdin
             .take()
             .ok_or_else(|| "`vibe-acp` stdin unavailable".to_string())?;
         let stdout = child
+            .0
             .stdout
             .take()
             .ok_or_else(|| "`vibe-acp` stdout unavailable".to_string())?;
@@ -85,9 +107,11 @@ impl DiscoverySession {
             }
         });
         let mut session = Self {
-            child,
+            _child: child,
             stdin,
             lines: rx,
+            deadline,
+            session_id: None,
         };
         session.initialize(cwd)?;
         Ok(session)
@@ -101,15 +125,21 @@ impl DiscoverySession {
     /// Read stdout lines until a response with the given id arrives.
     /// Notifications and unrelated responses are skipped.
     fn wait_response(&mut self, id: &str) -> Result<Value, String> {
-        let deadline = std::time::Instant::now() + DISCOVERY_TIMEOUT;
+        // All ACP responses share this deadline; preserve time for cleanup.
+        let deadline = self.deadline - CLOSE_TIMEOUT;
         loop {
             let remaining = deadline
-                .checked_duration_since(std::time::Instant::now())
+                .checked_duration_since(Instant::now())
                 .ok_or_else(|| "`vibe-acp` discovery timed out".to_string())?;
             let line = self
                 .lines
                 .recv_timeout(remaining)
-                .map_err(|_| "`vibe-acp` closed stdout before responding".to_string())?;
+                .map_err(|error| match error {
+                    mpsc::RecvTimeoutError::Timeout => "`vibe-acp` discovery timed out".to_string(),
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        "`vibe-acp` closed stdout before responding".to_string()
+                    }
+                })?;
             let Ok(value) = serde_json::from_str::<Value>(&line) else {
                 continue;
             };
@@ -155,7 +185,7 @@ impl DiscoverySession {
     /// Read the `session/new` response and extract the model selector.
     fn discover(&mut self) -> Result<SessionConfigOption, String> {
         let response = self.wait_response(SESSION_NEW_ID)?;
-        let session_id = response
+        self.session_id = response
             .pointer("/result/sessionId")
             .and_then(Value::as_str)
             .map(str::to_owned);
@@ -168,23 +198,30 @@ impl DiscoverySession {
         let option = model_select_option(options).ok_or_else(|| {
             "`vibe-acp` exposed no model selector at session creation".to_string()
         })?;
-        if let Some(session_id) = session_id {
-            let request = json!({
-                "jsonrpc": "2.0",
-                "id": SESSION_CLOSE_ID,
-                "method": "session/close",
-                "params": { "sessionId": session_id },
-            });
-            let _ = self.send(request);
-        }
         Ok(option)
     }
 
-    /// Best-effort cleanup: wait briefly for the close response, then kill.
+    /// Close a known session within the remaining global budget.
+    /// The process guard always kills and reaps the child when we return.
     fn close(&mut self) {
-        let deadline = std::time::Instant::now() + CLOSE_TIMEOUT;
-        while std::time::Instant::now() < deadline {
-            let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+        let Some(session_id) = self.session_id.take() else {
+            return;
+        };
+        let deadline = self.deadline.min(Instant::now() + CLOSE_TIMEOUT);
+        if Instant::now() >= deadline
+            || self
+                .send(json!({
+                    "jsonrpc": "2.0",
+                    "id": SESSION_CLOSE_ID,
+                    "method": "session/close",
+                    "params": { "sessionId": session_id },
+                }))
+                .is_err()
+        {
+            return;
+        }
+        while Instant::now() < deadline {
+            let remaining = deadline.saturating_duration_since(Instant::now());
             match self.lines.recv_timeout(remaining) {
                 Ok(line) => {
                     if let Ok(value) = serde_json::from_str::<Value>(&line) {
@@ -196,8 +233,6 @@ impl DiscoverySession {
                 Err(_) => break,
             }
         }
-        let _ = self.child.kill();
-        let _ = self.child.wait();
     }
 }
 
@@ -318,5 +353,203 @@ mod tests {
         let message = rpc_error_message("initialize", &error);
         assert!(!message.contains(AUTH_HINT));
         assert!(message.contains("invalid request"));
+    }
+
+    #[cfg(unix)]
+    struct FakeAgent {
+        directory: std::path::PathBuf,
+        scenario: &'static str,
+    }
+
+    #[cfg(unix)]
+    impl FakeAgent {
+        fn new(scenario: &'static str) -> Self {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static NEXT_DIRECTORY: AtomicU64 = AtomicU64::new(0);
+            let directory = std::env::temp_dir().join(format!(
+                "cadencr-vibe-test-{}-{}",
+                std::process::id(),
+                NEXT_DIRECTORY.fetch_add(1, Ordering::Relaxed),
+            ));
+            std::fs::create_dir(&directory).unwrap();
+            Self {
+                directory,
+                scenario,
+            }
+        }
+
+        fn spawn(&self) -> Result<super::DiscoverySession, String> {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "discovery::tests::fake_acp_process",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env("CADENCR_VIBE_TEST_SCENARIO", self.scenario)
+                .env("CADENCR_VIBE_TEST_DIRECTORY", &self.directory);
+            super::DiscoverySession::spawn_with_command(command, &self.directory)
+        }
+
+        fn pid(&self) -> libc::pid_t {
+            std::fs::read_to_string(self.directory.join("pid"))
+                .unwrap()
+                .parse()
+                .unwrap()
+        }
+
+        fn assert_reaped(&self) {
+            let mut status = 0;
+            // A still-running child returns 0; a zombie returns its PID.
+            // ECHILD proves the discovery code has already waited for it.
+            let result = unsafe { libc::waitpid(self.pid(), &mut status, libc::WNOHANG) };
+            let error = std::io::Error::last_os_error();
+            assert_eq!(result, -1, "discovery left a running or unreaped child");
+            assert_eq!(error.raw_os_error(), Some(libc::ECHILD));
+        }
+
+        fn requests(&self) -> String {
+            std::fs::read_to_string(self.directory.join("requests")).unwrap()
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for FakeAgent {
+        fn drop(&mut self) {
+            if let Ok(pid) = std::fs::read_to_string(self.directory.join("pid")) {
+                if let Ok(pid) = pid.parse::<libc::pid_t>() {
+                    let mut status = 0;
+                    // Clean up even when a regression assertion fails.
+                    if unsafe { libc::waitpid(pid, &mut status, libc::WNOHANG) } == 0 {
+                        unsafe {
+                            libc::kill(pid, libc::SIGKILL);
+                            libc::waitpid(pid, &mut status, 0);
+                        }
+                    }
+                }
+            }
+            let _ = std::fs::remove_dir_all(&self.directory);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_initialize_terminates_and_reaps_the_child() {
+        let agent = FakeAgent::new("initialize-error");
+        let error = agent.spawn().err().expect("initialization must fail");
+        agent.assert_reaped();
+        assert!(error.contains("fixture initialization failed"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn timed_out_initialize_terminates_and_reaps_the_child() {
+        let agent = FakeAgent::new("initialize-timeout");
+        let started = std::time::Instant::now();
+        let error = agent.spawn().err().expect("initialization must time out");
+        agent.assert_reaped();
+        assert!(error.contains("timed out"), "{error}");
+        assert!(started.elapsed() < std::time::Duration::from_millis(9500));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn slow_initialize_and_session_new_share_one_deadline() {
+        let agent = FakeAgent::new("slow-session");
+        let started = std::time::Instant::now();
+        let mut session = agent.spawn().expect("seven-second initialization must fit");
+        let result = session.discover();
+        session.close();
+        drop(session);
+        agent.assert_reaped();
+        assert!(agent.requests().contains("session/new"));
+        assert!(
+            result.is_err(),
+            "seven plus four seconds must exceed the budget"
+        );
+        assert!(result.err().unwrap().contains("timed out"));
+        assert!(started.elapsed() < std::time::Duration::from_millis(9500));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn successful_discovery_bounds_cleanup_and_reaps_the_child() {
+        let agent = FakeAgent::new("close-timeout");
+        let started = std::time::Instant::now();
+        let mut session = agent.spawn().unwrap();
+        let option = session.discover().expect("model selector expected");
+        session.close();
+        drop(session);
+        agent.assert_reaped();
+        assert_eq!(&*option.id.0, "model");
+        assert!(agent.requests().contains("session/close"));
+        assert!(started.elapsed() < std::time::Duration::from_millis(1800));
+    }
+
+    /// Runs in an isolated copy of this test binary, without a CLI dependency.
+    #[cfg(unix)]
+    #[test]
+    fn fake_acp_process() {
+        use std::io::{BufRead, Write};
+        use std::time::Duration;
+        let Ok(scenario) = std::env::var("CADENCR_VIBE_TEST_SCENARIO") else {
+            return;
+        };
+        let directory =
+            std::path::PathBuf::from(std::env::var_os("CADENCR_VIBE_TEST_DIRECTORY").unwrap());
+        // End the test harness's prefix before writing JSON-RPC lines.
+        println!();
+        std::io::stdout().flush().unwrap();
+        std::fs::write(directory.join("pid"), std::process::id().to_string()).unwrap();
+        let stall = || loop {
+            std::thread::sleep(Duration::from_secs(30));
+        };
+        for line in std::io::stdin().lock().lines() {
+            let request: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
+            let method = request["method"].as_str().unwrap();
+            let mut requests = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join("requests"))
+                .unwrap();
+            writeln!(requests, "{method}").unwrap();
+            if method == "initialize" && scenario == "initialize-timeout"
+                || method == "session/close" && scenario == "close-timeout"
+            {
+                stall();
+            }
+            let mut response = json!({"jsonrpc": "2.0", "id": request["id"]});
+            match method {
+                "initialize" if scenario == "initialize-error" => {
+                    response["error"] = json!({
+                        "code": -32603,
+                        "message": "fixture initialization failed"
+                    });
+                }
+                "initialize" => {
+                    if scenario == "slow-session" {
+                        std::thread::sleep(Duration::from_secs(7));
+                    }
+                    response["result"] = json!({"protocolVersion": 1});
+                }
+                "session/new" => {
+                    if scenario == "slow-session" {
+                        std::thread::sleep(Duration::from_secs(4));
+                    }
+                    response["result"] = json!({
+                        "sessionId": "fixture-session",
+                        "configOptions": [model_option()]
+                    });
+                }
+                "session/close" => response["result"] = serde_json::Value::Null,
+                _ => panic!("unexpected request {method}"),
+            }
+            println!("{response}");
+            std::io::stdout().flush().unwrap();
+            if scenario == "initialize-error" {
+                stall();
+            }
+        }
     }
 }

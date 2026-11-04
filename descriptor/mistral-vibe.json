@@ -3,7 +3,7 @@
   "agent": {
     "id": "mistral-vibe",
     "name": "@mistralai/mistral-vibe",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Mistral Vibe coding agent, bridged to Cadencr through its native ACP binary vibe-acp.",
     "repository": "https://github.com/edjubert/cadencr-plugin-provider-vibe",
     "website": "https://mistral.ai/vibe",
