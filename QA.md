@@ -86,7 +86,29 @@ released source binding and uploaded bytes were checked separately below.
 | Uploaded bytes | The downloaded archive has SHA-256 `5c6cd252bef4fb21acc584a145f8d65df6a560b4169f5bbd8b417edc19c75bce`; the downloaded `package.json` is byte-identical to the source metadata, with SHA-256 `101eb17740f2bbb5e980dc27dbd9ca8a2b086c0a9b5e531f2a8913996d56cbe4`. |
 | Pinned registry CLI | The official Linux `cli/v0.15.4` executable matches the registry pin `d925f203c3fd2e51621ad00ef1413bb25fdf8bc25792dbec9d5d2a67b1d4244d`. Its metadata, submission and complete contribution validators pass in an Ubuntu 24.04 container with read-only inputs. |
 | Registry contribution | [Registry PR #21](https://github.com/merkr-software/cadencr-registry/pull/21) adds the matching schema-2 package and submission, bound to the released tag and full source commit. Validation used registry base `e31b07eea3d17cc501f8e8b607784ebc1c6c98b0`. |
-| Registry CI | [Workflow run 41689046091](https://github.com/merkr-software/cadencr-registry/actions/runs/41689046091) reports `action_required` with no jobs executed; it requires maintainer action. |
+| Registry CI | [Workflow run 41689046091](https://github.com/merkr-software/cadencr-registry/actions/runs/41689046091) subsequently passed both `inert-metadata` and `contributor-tooling` after maintainer approval. These checks cover the original `0.1.0` candidate. |
+
+## Registry review corrections — 2026-11-04
+
+Addressed the two discovery defects reported in
+[registry PR #21](https://github.com/merkr-software/cadencr-registry/pull/21).
+The replacement release is `v0.1.1`; the existing `v0.1.0` tag and release
+assets are preserved.
+
+| Check | Result |
+| --- | --- |
+| Child lifetime | A process guard takes ownership immediately after spawn. Every subsequent exit, including initialization failure and timeout, kills and reaps the disposable ACP child. |
+| Global discovery deadline | Initialization and session creation share one deadline established before spawn. The total budget is 9 seconds, including up to 1 second reserved for session cleanup, below the host's 10-second timeout. |
+| Regression reproduction | All four new regression tests fail against the prior implementation: failed initialization, timed-out initialization, a 7-second initialization followed by 4-second session creation, and an unresponsive session close. |
+| Fixed regressions | All 13 Rust tests pass locally and in the native Apple Silicon workflow. The process tests check `waitpid` returns `ECHILD`, proving the child has been reaped, and enforce elapsed-time bounds. |
+| Native build provenance | `Native provider build` tests and builds the exact source revision on an ARM64 macOS runner with Rust `1.97.1` and the locked dependencies. Its unchanged `provenance.json` is published beside the release archive and metadata, recording the source commit, successful workflow run, toolchain, and each distribution file's SHA-256 and size. |
+| CI executable | The downloaded CI executable is native ARM64, passes strict code-signature verification, and reports `0.1.1`. Its SHA-256 is `2f7e14096db85d6b0ae7dd7b03b17b520ba0e239d09e4048ed2da5718d5fe7f3`. |
+| Real Vibe integration | With Vibe `2.26.0`, the CI executable discovers 19 models in 1.9 seconds, with a valid current model. ACP v1 initialization, session creation, and session closure pass; the discovered selector matches the live runtime. No prompt is sent. |
+| Replacement archive | The CadencR `0.15.4` CLI built from the exact `v0.16.0` application tag packs the CI distribution. The archive's SHA-256 is `7c96a1940f9e3b02a8c4a9f9eb9b803a28d20423a26d8f2e3a5a111195645ba4`; it contains only `bin/provider` (mode `0755`), `icon.svg`, `README.md`, and `LICENSE`. |
+
+The published provenance receipt identifies the build for the exact tagged
+source revision. Registry CI validates the final replacement candidate with
+the registry's pinned official Linux CLI.
 
 The CadencR v0.16.0 desktop Marketplace installation flow has not been exercised.
 Marketplace listing still requires maintainer acceptance, protected mirroring,
