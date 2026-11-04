@@ -6,8 +6,9 @@
 //!
 //! `run` execs the native ACP binary `vibe-acp` with stdio unchanged.
 //! `models` opens a disposable ACP session against the same binary and
-//! returns the live model selector observed at `session/new`, so discovery
-//! and the live session always agree on option ids and values.
+//! returns the live model and mode selectors observed at `session/new`, so
+//! discovery and the live session always agree on option ids and values. The
+//! mode selector choices carry `_meta.cadencr.permissionMode` host mappings.
 
 use std::ffi::OsString;
 use std::path::PathBuf;
