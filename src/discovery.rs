@@ -3,10 +3,12 @@
 //! ACP exposes session configuration only after `session/new`, and Cadencr
 //! requires a verified model selector before a session exists. Discovery
 //! therefore opens a disposable ACP session in the requested workspace,
-//! reads the `configOptions` model selector from the `session/new` response,
-//! closes the session when the agent supports it, and returns the selector
-//! verbatim. Because the same binary serves `run`, the live session will
-//! advertise the same selector id and values.
+//! reads the `configOptions` selectors from the `session/new` response,
+//! closes the session when the agent supports it, and returns them verbatim,
+//! except for the `mode` selector whose choices are annotated with the host
+//! permission-mode id (`_meta.cadencr.permissionMode`) so Cadencr can drive
+//! Vibe's session mode from its own mode chip. Because the same binary serves
+//! `run`, the live session will advertise the same selector ids and values.
 
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -30,12 +32,17 @@ const CLOSE_TIMEOUT: Duration = Duration::from_secs(1);
 const AUTH_HINT: &str = "Mistral Vibe credentials are missing or invalid. \
      Run `vibe --setup` (or export MISTRAL_API_KEY), then retry.";
 
-/// Discover the model selector for the workspace at `cwd`.
+/// Discover the model and mode selectors for the workspace at `cwd`.
+///
+/// The model selector is returned verbatim. The `mode` selector is returned
+/// with each choice annotated with `_meta.cadencr.permissionMode` so Cadencr
+/// maps its permission-mode chip onto Vibe's session modes (see CadencR's
+/// `docs/PROVIDER_SPEC/PROVIDER_PACKAGE.md`, "Mode and access-mode selectors").
 pub fn discover_model_options(cwd: &Path) -> Result<Vec<SessionConfigOption>, String> {
     let mut session = DiscoverySession::spawn(cwd)?;
     let discovered = session.discover();
     session.close();
-    discovered.map(|option| vec![option])
+    discovered.map(|options| discovery_options(&options))
 }
 
 struct DiscoverySession {
@@ -182,8 +189,8 @@ impl DiscoverySession {
         Ok(())
     }
 
-    /// Read the `session/new` response and extract the model selector.
-    fn discover(&mut self) -> Result<SessionConfigOption, String> {
+    /// Read the `session/new` response and return the raw config options.
+    fn discover(&mut self) -> Result<Vec<Value>, String> {
         let response = self.wait_response(SESSION_NEW_ID)?;
         self.session_id = response
             .pointer("/result/sessionId")
@@ -195,10 +202,11 @@ impl DiscoverySession {
             .ok_or_else(|| {
                 "`vibe-acp` returned no configOptions; cannot discover models".to_string()
             })?;
-        let option = model_select_option(options).ok_or_else(|| {
-            "`vibe-acp` exposed no model selector at session creation".to_string()
-        })?;
-        Ok(option)
+        let options = options.clone();
+        if model_select_option(&options).is_none() {
+            return Err("`vibe-acp` exposed no model selector at session creation".to_string());
+        }
+        Ok(options)
     }
 
     /// Close a known session within the remaining global budget.
@@ -233,6 +241,88 @@ impl DiscoverySession {
                 Err(_) => break,
             }
         }
+    }
+}
+
+/// Build the `models` output: the model selector verbatim, plus the `mode`
+/// selector with host permission-mode annotations on its choices.
+fn discovery_options(options: &[Value]) -> Vec<SessionConfigOption> {
+    let mut discovered = Vec::new();
+    if let Some(model) = model_select_option(options) {
+        discovered.push(model);
+    }
+    if let Some(mode) = mode_select_option(options) {
+        discovered.push(mode);
+    }
+    discovered
+}
+
+/// Host permission-mode wire id for a Vibe session mode value. Values without
+/// a mapping are left unannotated; the host ignores them.
+fn host_permission_mode(value: &str) -> Option<&'static str> {
+    match value {
+        "ask" => Some("ask"),
+        "accept-edits" => Some("acceptEdits"),
+        "smart-approve" => Some("auto"),
+        "auto-approve" => Some("bypassPermissions"),
+        _ => None,
+    }
+}
+
+/// Find the `select` option whose category is `mode`, annotate each choice
+/// with its host permission-mode id, and validate it through the ACP v1 types.
+fn mode_select_option(options: &[Value]) -> Option<SessionConfigOption> {
+    let candidate = options.iter().find(|option| {
+        option.get("category").and_then(Value::as_str) == Some("mode")
+            && option.get("type").and_then(Value::as_str) == Some("select")
+    })?;
+    let mut candidate = candidate.clone();
+    annotate_mode_choices(&mut candidate);
+    let option: SessionConfigOption = serde_json::from_value(candidate).ok()?;
+    let has_choices = match &option.kind {
+        agent_client_protocol::schema::v1::SessionConfigKind::Select(select) => {
+            select_offers_choices(&select.options)
+        }
+        _ => false,
+    };
+    has_choices.then_some(option)
+}
+
+/// Write `_meta.cadencr.permissionMode` on every mapped choice of a mode
+/// selector, grouped or ungrouped.
+fn annotate_mode_choices(option: &mut Value) {
+    fn annotate_array(choices: &mut [Value]) {
+        for choice in choices {
+            if let Some(object) = choice.as_object_mut() {
+                let host_id = object
+                    .get("value")
+                    .and_then(Value::as_str)
+                    .and_then(host_permission_mode);
+                if let Some(host_id) = host_id {
+                    let meta = object
+                        .entry("_meta")
+                        .or_insert_with(|| Value::Object(Default::default()));
+                    let cadencr = meta
+                        .as_object_mut()
+                        .expect("freshly inserted _meta is an object")
+                        .entry("cadencr")
+                        .or_insert_with(|| Value::Object(Default::default()));
+                    cadencr
+                        .as_object_mut()
+                        .expect("freshly inserted cadencr is an object")
+                        .insert(
+                            "permissionMode".to_string(),
+                            Value::String(host_id.to_string()),
+                        );
+                }
+                if let Some(nested) = object.get_mut("options").and_then(Value::as_array_mut) {
+                    annotate_array(nested);
+                }
+            }
+        }
+    }
+    if let Some(choices) = option.get_mut("options").and_then(Value::as_array_mut) {
+        annotate_array(choices);
     }
 }
 
@@ -291,8 +381,11 @@ fn rpc_error_message(request: &str, error: &Value) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{model_select_option, rpc_error_message, AUTH_HINT};
-    use serde_json::json;
+    use super::{
+        discovery_options, host_permission_mode, mode_select_option, model_select_option,
+        rpc_error_message, AUTH_HINT,
+    };
+    use serde_json::{json, Value};
 
     fn model_option() -> serde_json::Value {
         json!({
@@ -338,6 +431,90 @@ mod tests {
         let mut option = model_option();
         option.as_object_mut().unwrap().remove("category");
         assert!(model_select_option(&[option]).is_some());
+    }
+
+    fn vibe_mode_option() -> serde_json::Value {
+        json!({
+            "id": "mode",
+            "name": "Session Mode",
+            "category": "mode",
+            "type": "select",
+            "currentValue": "accept-edits",
+            "options": [
+                { "value": "ask", "name": "Ask" },
+                { "value": "accept-edits", "name": "Accept Edits" },
+                { "value": "smart-approve", "name": "Smart Approve" },
+                { "value": "auto-approve", "name": "Auto Approve" },
+                { "value": "custom", "name": "Custom" },
+            ],
+        })
+    }
+
+    #[test]
+    fn discovery_output_carries_model_and_annotated_mode() {
+        let options = vec![vibe_mode_option(), model_option()];
+        let discovered = discovery_options(&options);
+        assert_eq!(discovered.len(), 2);
+        assert_eq!(&*discovered[0].id.0, "model");
+        assert_eq!(&*discovered[1].id.0, "mode");
+        let serialized = serde_json::to_value(&discovered[1]).unwrap();
+        let choices = serialized["options"].as_array().unwrap();
+        let mapping = |value: &str| {
+            choices
+                .iter()
+                .find(|choice| choice["value"] == value)
+                .and_then(|choice| choice.pointer("/_meta/cadencr/permissionMode"))
+                .and_then(Value::as_str)
+        };
+        assert_eq!(mapping("ask"), Some("ask"));
+        assert_eq!(mapping("accept-edits"), Some("acceptEdits"));
+        assert_eq!(mapping("smart-approve"), Some("auto"));
+        assert_eq!(mapping("auto-approve"), Some("bypassPermissions"));
+        assert_eq!(mapping("custom"), None);
+    }
+
+    #[test]
+    fn mode_selector_is_omitted_when_the_agent_exposes_none() {
+        assert_eq!(discovery_options(&[model_option()]).len(), 1);
+        assert!(mode_select_option(&[model_option()]).is_none());
+    }
+
+    #[test]
+    fn mode_selector_must_offer_choices() {
+        let mut option = vibe_mode_option();
+        option["options"] = json!([]);
+        assert!(mode_select_option(&[option]).is_none());
+    }
+
+    #[test]
+    fn grouped_mode_choices_are_annotated_too() {
+        let mut option = vibe_mode_option();
+        option["options"] = json!([
+            { "group": "builtin", "name": "Builtin", "options": [
+                { "value": "auto-approve", "name": "Auto Approve" }
+            ] }
+        ]);
+        let parsed = mode_select_option(&[option]).expect("grouped mode selector expected");
+        let serialized = serde_json::to_value(&parsed).unwrap();
+        let choice = &serialized["options"][0]["options"][0];
+        assert_eq!(
+            choice
+                .pointer("/_meta/cadencr/permissionMode")
+                .and_then(Value::as_str),
+            Some("bypassPermissions")
+        );
+    }
+
+    #[test]
+    fn known_vibe_modes_map_to_host_ids() {
+        assert_eq!(host_permission_mode("ask"), Some("ask"));
+        assert_eq!(host_permission_mode("accept-edits"), Some("acceptEdits"));
+        assert_eq!(host_permission_mode("smart-approve"), Some("auto"));
+        assert_eq!(
+            host_permission_mode("auto-approve"),
+            Some("bypassPermissions")
+        );
+        assert_eq!(host_permission_mode("something-else"), None);
     }
 
     #[test]
@@ -478,11 +655,13 @@ mod tests {
         let agent = FakeAgent::new("close-timeout");
         let started = std::time::Instant::now();
         let mut session = agent.spawn().unwrap();
-        let option = session.discover().expect("model selector expected");
+        let options = session.discover().expect("model selector expected");
         session.close();
         drop(session);
         agent.assert_reaped();
-        assert_eq!(&*option.id.0, "model");
+        assert!(options
+            .iter()
+            .any(|option| option.get("id").and_then(Value::as_str) == Some("model")));
         assert!(agent.requests().contains("session/close"));
         assert!(started.elapsed() < std::time::Duration::from_millis(1800));
     }

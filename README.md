@@ -11,7 +11,7 @@ The connector implements the Cadencr provider executable contract:
 | Command | Behavior |
 | --- | --- |
 | `version` | Prints the connector version. |
-| `models --format acp-config-options-v1 --cwd <abs>` | Opens a disposable ACP session against `vibe-acp`, reads the live model selector from `session/new`, closes the session, and prints the ACP v1 `SessionConfigOption` array. |
+| `models --format acp-config-options-v1 --cwd <abs>` | Opens a disposable ACP session against `vibe-acp`, reads the live model and mode selectors from `session/new`, closes the session, and prints the ACP v1 `SessionConfigOption` array. Mode choices carry `_meta.cadencr.permissionMode` host mappings. |
 | `run --protocol acp-v1` | Execs the native `vibe-acp` binary with stdin/stdout/stderr unchanged. Vibe speaks ACP v1 natively, so there is no translation layer. |
 
 ## Prerequisites
@@ -155,10 +155,17 @@ installing it. The settings import flow handles this location automatically.
 ## Notes
 
 - Model discovery uses a real disposable ACP session so the pre-session
-  selector always matches the live session selector (same binary, same ids).
+  selectors always match the live session selectors (same binary, same ids).
   Discovery shares one 9-second budget, including up to 1 second for session
   cleanup, below Cadencr's 10-second host timeout. The child process is killed
   and reaped on every exit, including initialization failures.
+- The `mode` selector is returned alongside the model selector with each choice
+  annotated with `_meta.cadencr.permissionMode`, so CadencR maps its mode chip
+  onto Vibe's session modes: `ask` → `ask`, `accept-edits` → `acceptEdits`,
+  `smart-approve` → `auto`, `auto-approve` → `bypassPermissions`. CadencR then
+  applies the selected mode to the live session through
+  `session/set_config_option` (or `session/set_mode`), which makes auto-approve
+  effective instead of prompting on every tool call.
 - Vibe releases are frequent (several per week). The connector only relies on
   stable ACP v1 surface (`initialize`, `session/new`, `session/close`,
   `configOptions`), so a CLI upgrade does not require a connector change.
