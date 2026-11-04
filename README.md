@@ -156,8 +156,9 @@ installing it. The settings import flow handles this location automatically.
 
 - Model discovery uses a real disposable ACP session so the pre-session
   selector always matches the live session selector (same binary, same ids).
-  Discovery stays under Cadencr's 10-second host timeout with an internal
-  8-second budget.
+  Discovery shares one 9-second budget, including up to 1 second for session
+  cleanup, below Cadencr's 10-second host timeout. The child process is killed
+  and reaped on every exit, including initialization failures.
 - Vibe releases are frequent (several per week). The connector only relies on
   stable ACP v1 surface (`initialize`, `session/new`, `session/close`,
   `configOptions`), so a CLI upgrade does not require a connector change.
@@ -176,8 +177,15 @@ version and includes the Apple Silicon macOS target qualified for this release.
 Its SHA-256 binds the exact candidate archive; a rebuild that changes the
 archive must update the digest.
 
-Build each target on a native runner, then stage exactly these files outside
-the source checkout:
+The `Native provider build` GitHub Actions workflow tests and builds the
+Apple Silicon target on a native macOS runner, using Rust `1.97.1`.
+Its artifact contains `distribution/` and `provenance.json`, which records
+the exact source commit, workflow run, toolchain, and distribution file hashes.
+Use the successful build for the release's exact source commit. Verify the
+receipt against the downloaded files and restore `bin/provider` to mode `0755`
+(GitHub artifact downloads do not preserve executable permissions).
+
+Stage exactly these distribution files outside the source checkout:
 
 ```text
 staging/
@@ -195,12 +203,13 @@ cadencr registry pack-provider \
   --package marketplace/package.json \
   --target darwin-aarch64 \
   --directory /absolute/path/to/staging \
-  --output /absolute/path/to/provider-mistral-vibe-0.1.0-darwin-aarch64.tar.gz
+  --output /absolute/path/to/provider-mistral-vibe-0.1.1-darwin-aarch64.tar.gz
 ```
 
 The returned SHA-256 must match the digest already recorded in
 `marketplace/package.json`. Publish the immutable source tag, archive, and this
-`package.json` in the author repository's GitHub Release. Then prepare a
+`package.json` and the unchanged CI `provenance.json` in the author repository's
+GitHub Release. Then prepare a
 schema-2 provider package and matching submission for the
 `merkr-software/cadencr-registry` contribution PR. The submission must bind the
 exact release tag and full source commit; validate the package and submission

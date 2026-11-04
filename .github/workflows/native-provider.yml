@@ -1,0 +1,40 @@
+name: Native provider build
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-darwin-aarch64:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      RUSTUP_TOOLCHAIN: "1.97.1"
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Require the native Apple Silicon runner
+        run: test "$(uname -m)" = arm64
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.97.1 --profile minimal --component rustfmt
+      - name: Check formatting and regressions
+        run: |
+          cargo fmt -- --check
+          cargo test --locked
+      - name: Build and verify the native executable
+        run: |
+          python3 scripts/build-provider.py
+          codesign --verify --strict bin/provider
+      - name: Stage the exact distribution and build provenance
+        run: python3 scripts/stage-provider-release.py --output dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: provider-darwin-aarch64-${{ github.sha }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 90
