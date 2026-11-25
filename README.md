@@ -170,8 +170,10 @@ installing it. The settings import flow handles this location automatically.
   stable ACP v1 surface (`initialize`, `session/new`, `session/close`,
   `configOptions`), so a CLI upgrade does not require a connector change.
 - The `thinking` config option Vibe exposes uses a non-standard category
-  (`thinking` instead of `thought_level`). It appears in Cadencr as a generic
-  selector, not as the native thinking-effort control.
+  (`thinking` instead of `thought_level`). Discovery re-categorizes it as
+  `thought_level` while keeping the option id verbatim, so Cadencr renders its
+  native thinking-effort control and `session/set_config_option` still targets
+  Vibe's own `thinking` option on the live session.
 - Durable resume: Vibe advertises `loadSession` (legacy load with replay
   suppression on the Cadencr side) and `session/close`. Cadencr handles both
   automatically.

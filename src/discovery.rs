@@ -244,8 +244,9 @@ impl DiscoverySession {
     }
 }
 
-/// Build the `models` output: the model selector verbatim, plus the `mode`
-/// selector with host permission-mode annotations on its choices.
+/// Build the `models` output: the model selector verbatim, the `mode`
+/// selector with host permission-mode annotations on its choices, and the
+/// `thinking` selector re-categorized as `thought_level`.
 fn discovery_options(options: &[Value]) -> Vec<SessionConfigOption> {
     let mut discovered = Vec::new();
     if let Some(model) = model_select_option(options) {
@@ -253,6 +254,9 @@ fn discovery_options(options: &[Value]) -> Vec<SessionConfigOption> {
     }
     if let Some(mode) = mode_select_option(options) {
         discovered.push(mode);
+    }
+    if let Some(thinking) = thinking_select_option(options) {
+        discovered.push(thinking);
     }
     discovered
 }
@@ -326,6 +330,37 @@ fn annotate_mode_choices(option: &mut Value) {
     }
 }
 
+/// Find the `select` option whose category is `thinking`, falling back to the
+/// conventional id `thinking`, and re-categorize it as the standard ACP
+/// `thought_level` so the host renders its native thinking-effort control.
+/// The option id is kept verbatim so `session/set_config_option` on the live
+/// session still targets Vibe's own `thinking` option.
+fn thinking_select_option(options: &[Value]) -> Option<SessionConfigOption> {
+    let candidate = options
+        .iter()
+        .find(|option| {
+            option.get("category").and_then(Value::as_str) == Some("thinking")
+                && option.get("type").and_then(Value::as_str) == Some("select")
+        })
+        .or_else(|| {
+            options
+                .iter()
+                .find(|option| option.get("id").and_then(Value::as_str) == Some("thinking"))
+        })?;
+    let mut candidate = candidate.clone();
+    if let Some(object) = candidate.as_object_mut() {
+        object.insert("category".to_string(), Value::String("thought_level".to_string()));
+    }
+    let option: SessionConfigOption = serde_json::from_value(candidate).ok()?;
+    let has_choices = match &option.kind {
+        agent_client_protocol::schema::v1::SessionConfigKind::Select(select) => {
+            select_offers_choices(&select.options)
+        }
+        _ => false,
+    };
+    has_choices.then_some(option)
+}
+
 /// Find the `select` option whose category is `model`, falling back to the
 /// conventional id `model`, and validate it through the ACP v1 types.
 fn model_select_option(options: &[Value]) -> Option<SessionConfigOption> {
@@ -383,7 +418,7 @@ fn rpc_error_message(request: &str, error: &Value) -> String {
 mod tests {
     use super::{
         discovery_options, host_permission_mode, mode_select_option, model_select_option,
-        rpc_error_message, AUTH_HINT,
+        rpc_error_message, thinking_select_option, AUTH_HINT,
     };
     use serde_json::{json, Value};
 
@@ -471,6 +506,59 @@ mod tests {
         assert_eq!(mapping("smart-approve"), Some("auto"));
         assert_eq!(mapping("auto-approve"), Some("bypassPermissions"));
         assert_eq!(mapping("custom"), None);
+    }
+
+    fn vibe_thinking_option() -> serde_json::Value {
+        json!({
+            "id": "thinking",
+            "name": "Thinking",
+            "category": "thinking",
+            "type": "select",
+            "currentValue": "medium",
+            "options": [
+                { "value": "off", "name": "Off" },
+                { "value": "low", "name": "Low" },
+                { "value": "medium", "name": "Medium" },
+                { "value": "high", "name": "High" },
+            ],
+        })
+    }
+
+    #[test]
+    fn thinking_selector_is_recategorized_as_thought_level() {
+        let option = thinking_select_option(&[vibe_thinking_option()])
+            .expect("thinking selector expected");
+        assert_eq!(&*option.id.0, "thinking");
+        let serialized = serde_json::to_value(&option).unwrap();
+        assert_eq!(serialized["category"], json!("thought_level"));
+    }
+
+    #[test]
+    fn thinking_selector_falls_back_to_the_thinking_id() {
+        let mut option = vibe_thinking_option();
+        option.as_object_mut().unwrap().remove("category");
+        let parsed = thinking_select_option(&[option]).expect("thinking selector expected");
+        assert_eq!(
+            serde_json::to_value(&parsed).unwrap()["category"],
+            json!("thought_level")
+        );
+    }
+
+    #[test]
+    fn thinking_selector_must_offer_choices() {
+        let mut option = vibe_thinking_option();
+        option["options"] = json!([]);
+        assert!(thinking_select_option(&[option]).is_none());
+    }
+
+    #[test]
+    fn discovery_output_carries_the_thinking_selector() {
+        let options = vec![vibe_mode_option(), model_option(), vibe_thinking_option()];
+        let discovered = discovery_options(&options);
+        assert_eq!(discovered.len(), 3);
+        assert_eq!(&*discovered[2].id.0, "thinking");
+        let serialized = serde_json::to_value(&discovered[2]).unwrap();
+        assert_eq!(serialized["category"], json!("thought_level"));
     }
 
     #[test]
